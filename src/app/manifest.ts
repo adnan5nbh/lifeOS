@@ -1,9 +1,10 @@
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
-  return {
+  const manifest = {
     name: "LifeOS",
     short_name: "LifeOS",
+    version: "1.1.0",
     description: "Your adaptive daily schedule, health tracker, and AI assistant.",
     start_url: "/",
     display: "standalone",
@@ -36,4 +37,6 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
   };
+
+  return manifest as MetadataRoute.Manifest;
 }
