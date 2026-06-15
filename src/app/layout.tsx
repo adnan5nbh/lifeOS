@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
+import BottomNav from "@/components/BottomNav";
 import UniversalInputBar from "@/components/assistant/UniversalInputBar";
 import RegisterServiceWorker from "@/components/RegisterServiceWorker";
 
@@ -42,7 +43,8 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <NavBar />
-        {children}
+        <div className="flex-1 pb-16 sm:pb-0">{children}</div>
+        <BottomNav />
         <UniversalInputBar />
         <RegisterServiceWorker />
       </body>

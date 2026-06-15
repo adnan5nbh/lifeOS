@@ -115,7 +115,7 @@ export default function UniversalInputBar() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
+    <div className="fixed bottom-20 right-5 z-40 flex flex-col items-end gap-3 sm:bottom-5">
       {open && (
         <div className="flex w-[calc(100vw-2.5rem)] max-w-md flex-col gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-xl max-h-[70vh] overflow-y-auto">
           <div className="flex items-center justify-between">
