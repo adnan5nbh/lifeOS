@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import AuthStatus from "./AuthStatus";
 
 const LINKS = [
   { href: "/discover", label: "Discover" },
@@ -11,6 +12,8 @@ const LINKS = [
 
 export default function NavBar() {
   const pathname = usePathname();
+
+  if (pathname === "/login") return null;
 
   return (
     <nav className="border-b border-slate-700 bg-slate-900">
@@ -32,6 +35,7 @@ export default function NavBar() {
             </Link>
           );
         })}
+        <AuthStatus />
       </div>
     </nav>
   );
