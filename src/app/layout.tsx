@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import UniversalInputBar from "@/components/assistant/UniversalInputBar";
+import RegisterServiceWorker from "@/components/RegisterServiceWorker";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,6 +18,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "LifeOS",
   description: "Your adaptive daily schedule",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "LifeOS",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#020617",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -33,6 +44,7 @@ export default function RootLayout({
         <NavBar />
         {children}
         <UniversalInputBar />
+        <RegisterServiceWorker />
       </body>
     </html>
   );
