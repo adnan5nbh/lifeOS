@@ -91,11 +91,11 @@ export function useEvents() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function addEvent(event: Omit<CalendarEvent, "id" | "completedDates">) {
+  async function addEvent(event: Omit<CalendarEvent, "id" | "completedDates">): Promise<CalendarEvent | null> {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return null;
 
     const { data, error } = await supabase
       .from("calendar_events")
@@ -112,9 +112,11 @@ export function useEvents() {
       .select()
       .single();
 
-    if (!error && data) {
-      setEvents((prev) => [...prev, rowToEvent(data as EventRow)]);
-    }
+    if (error || !data) return null;
+
+    const created = rowToEvent(data as EventRow);
+    setEvents((prev) => [...prev, created]);
+    return created;
   }
 
   async function updateEvent(id: string, updates: Omit<CalendarEvent, "id" | "completedDates">) {

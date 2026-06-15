@@ -27,6 +27,9 @@ export interface FoodEntry {
   name: string;
   calories: number;
   protein: number;
+  carbs?: number;
+  fat?: number;
+  servingSize?: string;
 }
 
 export interface DayLog {

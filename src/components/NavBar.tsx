@@ -8,6 +8,8 @@ const LINKS = [
   { href: "/discover", label: "Discover" },
   { href: "/", label: "Schedule" },
   { href: "/health", label: "Health & Fitness" },
+  { href: "/notes", label: "Notes & Journal" },
+  { href: "/chat", label: "Chat" },
 ];
 
 export default function NavBar() {

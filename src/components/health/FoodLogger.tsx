@@ -47,6 +47,8 @@ export default function FoodLogger({
               <div className="flex items-center gap-3 text-xs text-slate-400">
                 <span>{f.calories} kcal</span>
                 <span>{f.protein} g protein</span>
+                {f.carbs != null && <span>{f.carbs} g carbs</span>}
+                {f.fat != null && <span>{f.fat} g fat</span>}
                 <button
                   onClick={() => onDelete(f.id)}
                   className="rounded-lg px-2 py-1 text-slate-500 hover:text-rose-400"
