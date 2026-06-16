@@ -114,6 +114,21 @@ export default function UniversalInputBar() {
     setResult({ ...result, actions: updated });
   }
 
+  async function confirmAction(index: number) {
+    if (!result) return;
+    const action = result.actions[index];
+    if (!action.confirm) return;
+    const confirmed = await action.confirm();
+    const updated = [...result.actions];
+    updated[index] = confirmed;
+    setResult({ ...result, actions: updated });
+  }
+
+  function cancelAction(index: number) {
+    if (!result) return;
+    setResult({ ...result, actions: result.actions.filter((_, i) => i !== index) });
+  }
+
   return (
     <div className="fixed bottom-20 right-5 z-40 flex flex-col items-end gap-3 sm:bottom-5">
       {open && (
@@ -195,6 +210,8 @@ export default function UniversalInputBar() {
               actions={result.actions}
               onDismiss={() => setResult(null)}
               onRetry={retryAction}
+              onConfirm={confirmAction}
+              onCancel={cancelAction}
             />
           )}
         </div>

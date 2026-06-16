@@ -5,10 +5,13 @@ import { useJournal } from "@/lib/notes/useJournal";
 import { todayKey } from "@/lib/health/utils";
 
 export default function JournalSection() {
-  const { entries, loaded, addEntry, deleteEntry, analyseEntry } = useJournal();
+  const { entries, loaded, addEntry, updateEntry, deleteEntry, analyseEntry } = useJournal();
   const [date, setDate] = useState(todayKey());
   const [content, setContent] = useState("");
   const [analysing, setAnalysing] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editContent, setEditContent] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,6 +29,18 @@ export default function JournalSection() {
       await analyseEntry(entry.id);
       setAnalysing(null);
     }
+  }
+
+  function startEdit(id: string, entryDate: string, entryContent: string) {
+    setEditingId(id);
+    setEditDate(entryDate);
+    setEditContent(entryContent);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editContent.trim() || !editDate) return;
+    await updateEntry(editingId, editDate, editContent.trim());
+    setEditingId(null);
   }
 
   const groups = new Map<string, typeof entries>();
@@ -72,32 +87,72 @@ export default function JournalSection() {
                 key={entry.id}
                 className="rounded-lg border border-slate-800 bg-slate-950 p-3"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <p className="whitespace-pre-wrap text-sm text-slate-100">{entry.content}</p>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      onClick={() => {
-                        setAnalysing(entry.id);
-                        analyseEntry(entry.id).finally(() => setAnalysing(null));
-                      }}
-                      disabled={analysing === entry.id}
-                      className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:text-indigo-300 disabled:opacity-50"
-                    >
-                      {analysing === entry.id ? "Analysing…" : "Analyse"}
-                    </button>
-                    <button
-                      onClick={() => deleteEntry(entry.id)}
-                      className="rounded-lg px-2 py-1 text-slate-500 hover:text-rose-400"
-                      aria-label="Delete entry"
-                    >
-                      ✕
-                    </button>
+                {editingId === entry.id ? (
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="w-40 rounded-lg border border-slate-600 px-2 py-1 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none"
+                    />
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={4}
+                      className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none"
+                    />
+                    <div className="flex gap-2 self-end">
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="rounded-lg px-3 py-1 text-xs text-slate-400 hover:bg-slate-800"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveEdit}
+                        className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-400"
+                      >
+                        Save
+                      </button>
+                    </div>
                   </div>
-                </div>
-                {entry.aiAnalysis && (
-                  <div className="mt-2 border-l-2 border-indigo-400 bg-slate-800 pl-3 py-2 text-sm text-slate-300">
-                    {entry.aiAnalysis}
-                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="whitespace-pre-wrap text-sm text-slate-100">{entry.content}</p>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setAnalysing(entry.id);
+                            analyseEntry(entry.id).finally(() => setAnalysing(null));
+                          }}
+                          disabled={analysing === entry.id}
+                          className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:text-indigo-300 disabled:opacity-50"
+                        >
+                          {analysing === entry.id ? "Analysing…" : "Analyse"}
+                        </button>
+                        <button
+                          onClick={() => startEdit(entry.id, entry.date, entry.content)}
+                          className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:text-indigo-300"
+                          aria-label="Edit entry"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={() => deleteEntry(entry.id)}
+                          className="rounded-lg px-2 py-1 text-slate-500 hover:text-rose-400"
+                          aria-label="Delete entry"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    {entry.aiAnalysis && (
+                      <div className="mt-2 border-l-2 border-indigo-400 bg-slate-800 pl-3 py-2 text-sm text-slate-300">
+                        {entry.aiAnalysis}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}

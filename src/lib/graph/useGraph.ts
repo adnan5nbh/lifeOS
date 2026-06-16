@@ -113,5 +113,16 @@ export function useGraph() {
     if (data) setClusters(data as GraphCluster[]);
   }
 
-  return { nodes, edges, clusters, loaded, addNode, deleteNode, renameNode, upsertEdge, saveClusters };
+  async function clearAll(): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("graph_clusters").delete().eq("user_id", user.id);
+    await supabase.from("graph_edges").delete().eq("user_id", user.id);
+    await supabase.from("graph_nodes").delete().eq("user_id", user.id);
+    setClusters([]);
+    setEdges([]);
+    setNodes([]);
+  }
+
+  return { nodes, edges, clusters, loaded, addNode, deleteNode, renameNode, upsertEdge, saveClusters, clearAll };
 }

@@ -40,6 +40,23 @@ export type AssistantAction =
       type: "update_steps";
       steps: number;
       mode: "set" | "increment";
+    }
+  | {
+      type: "delete_graph_node";
+      nodeLabel: string;
+    }
+  | {
+      type: "clear_all_graph_nodes";
+    }
+  | {
+      type: "edit_journal_entry";
+      id: string;
+      date: string;
+      content: string;
+    }
+  | {
+      type: "delete_journal_entry";
+      id: string;
     };
 
 const MUSCLE_GROUPS: MuscleGroup[] = [
@@ -155,6 +172,50 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
         mode: { type: "string", enum: ["set", "increment"], description: "Whether 'steps' replaces or is added to today's total." },
       },
       required: ["steps", "mode"],
+    },
+  },
+  {
+    name: "delete_graph_node",
+    description: "Delete a specific node from the user's knowledge graph by its label name. Always ask the user to confirm before calling this.",
+    input_schema: {
+      type: "object",
+      properties: {
+        nodeLabel: { type: "string", description: "The label name of the node to delete." },
+      },
+      required: ["nodeLabel"],
+    },
+  },
+  {
+    name: "clear_all_graph_nodes",
+    description: "Clear ALL nodes, edges, and clusters from the user's knowledge graph. This is irreversible — always confirm with the user before calling this.",
+    input_schema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: "edit_journal_entry",
+    description: "Edit an existing journal entry by its ID, updating its date and content.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The ID of the journal entry to edit." },
+        date: { type: "string", description: "The new date for the entry in YYYY-MM-DD format." },
+        content: { type: "string", description: "The new content for the entry." },
+      },
+      required: ["id", "date", "content"],
+    },
+  },
+  {
+    name: "delete_journal_entry",
+    description: "Delete a journal entry by its ID. Always ask the user to confirm before calling this.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The ID of the journal entry to delete." },
+      },
+      required: ["id"],
     },
   },
 ];

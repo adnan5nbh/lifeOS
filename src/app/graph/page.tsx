@@ -145,6 +145,7 @@ export default function GraphPage() {
               edgeCount={graph.edges.length}
               onRunClusters={runClusters}
               clusterRunning={clusterRunning}
+              onClearAll={graph.clearAll}
             />
           </div>
         )}

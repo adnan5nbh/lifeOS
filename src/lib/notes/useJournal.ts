@@ -84,9 +84,23 @@ export function useJournal() {
     return entry;
   }
 
-  async function deleteEntry(id: string) {
+  async function updateEntry(id: string, date: string, content: string): Promise<void> {
+    const now = new Date().toISOString();
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, date, content, updatedAt: now } : e)));
+    await supabase.from("journal_entries").update({ date, content, updated_at: now }).eq("id", id);
+  }
+
+  async function deleteEntry(id: string): Promise<void> {
+    const entry = entries.find((e) => e.id === id);
     setEntries((prev) => prev.filter((e) => e.id !== id));
     await supabase.from("journal_entries").delete().eq("id", id);
+    if (entry) {
+      fetch("/api/graph/cleanup-entry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: entry.content }),
+      }).catch(() => {});
+    }
   }
 
   async function analyseEntry(id: string) {
@@ -105,5 +119,5 @@ export function useJournal() {
     await supabase.from("journal_entries").update({ ai_analysis: analysis }).eq("id", id);
   }
 
-  return { entries, loaded, addEntry, deleteEntry, analyseEntry };
+  return { entries, loaded, addEntry, updateEntry, deleteEntry, analyseEntry };
 }

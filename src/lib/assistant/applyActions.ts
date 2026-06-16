@@ -3,6 +3,7 @@ import { useEvents } from "@/lib/calendar/useEvents";
 import { useHealthData } from "@/lib/health/useHealthData";
 import { useQuickNotes } from "@/lib/notes/useQuickNotes";
 import { useJournal } from "@/lib/notes/useJournal";
+import { createClient } from "@/lib/supabase/client";
 
 export interface AssistantHooks {
   events: ReturnType<typeof useEvents>;
@@ -13,10 +14,11 @@ export interface AssistantHooks {
 
 export interface AppliedAction {
   action: AssistantAction;
-  status: "applied" | "failed";
+  status: "applied" | "failed" | "pending";
   summary: string;
   error?: string;
   undo?: () => Promise<void>;
+  confirm?: () => Promise<AppliedAction>;
 }
 
 function describeAction(action: AssistantAction): string {
@@ -33,6 +35,14 @@ function describeAction(action: AssistantAction): string {
       return "Add quick note";
     case "update_steps":
       return `${action.mode === "set" ? "Set" : "Add"} ${action.steps} steps`;
+    case "delete_graph_node":
+      return `Delete graph node "${action.nodeLabel}"`;
+    case "clear_all_graph_nodes":
+      return "Clear all graph nodes and edges";
+    case "edit_journal_entry":
+      return `Edit journal entry`;
+    case "delete_journal_entry":
+      return `Delete journal entry`;
   }
 }
 
@@ -146,6 +156,114 @@ export async function applyAction(action: AssistantAction, hooks: AssistantHooks
           summary: `${action.mode === "set" ? "Set" : "Added"} ${action.steps} steps`,
           undo: async () => {
             await hooks.health.updateToday((log) => ({ ...log, steps: previous }));
+          },
+        };
+      }
+
+      case "delete_graph_node": {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
+        const { data: nodes } = await supabase
+          .from("graph_nodes")
+          .select("id, label")
+          .ilike("label", action.nodeLabel)
+          .eq("user_id", user.id)
+          .limit(1);
+        const node = nodes?.[0];
+        if (!node) throw new Error(`Node "${action.nodeLabel}" not found in your graph`);
+        const nodeId = node.id as string;
+        const nodeLabel = node.label as string;
+        return {
+          action,
+          status: "pending",
+          summary: `Delete graph node "${nodeLabel}"`,
+          confirm: async () => {
+            try {
+              const sb = createClient();
+              await sb.from("graph_nodes").delete().eq("id", nodeId);
+              return {
+                action,
+                status: "applied",
+                summary: `Deleted graph node "${nodeLabel}". Refresh the Graph page to see changes.`,
+              };
+            } catch (err) {
+              return {
+                action,
+                status: "failed",
+                summary: `Delete graph node "${nodeLabel}"`,
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
+          },
+        };
+      }
+
+      case "clear_all_graph_nodes": {
+        return {
+          action,
+          status: "pending",
+          summary: "Clear ALL nodes, edges, and clusters from your knowledge graph",
+          confirm: async () => {
+            try {
+              const supabase = createClient();
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) throw new Error("Not authenticated");
+              await supabase.from("graph_clusters").delete().eq("user_id", user.id);
+              await supabase.from("graph_edges").delete().eq("user_id", user.id);
+              await supabase.from("graph_nodes").delete().eq("user_id", user.id);
+              return {
+                action,
+                status: "applied",
+                summary: "Cleared all graph nodes and edges. Refresh the Graph page to see changes.",
+              };
+            } catch (err) {
+              return {
+                action,
+                status: "failed",
+                summary: "Clear all graph nodes",
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
+          },
+        };
+      }
+
+      case "edit_journal_entry": {
+        const entry = hooks.journal.entries.find((e) => e.id === action.id);
+        if (!entry) throw new Error("Journal entry not found");
+        await hooks.journal.updateEntry(action.id, action.date, action.content);
+        return {
+          action,
+          status: "applied",
+          summary: `Edited journal entry for ${action.date}`,
+        };
+      }
+
+      case "delete_journal_entry": {
+        const entry = hooks.journal.entries.find((e) => e.id === action.id);
+        if (!entry) throw new Error("Journal entry not found");
+        const preview = entry.content.length > 60 ? entry.content.slice(0, 60) + "…" : entry.content;
+        return {
+          action,
+          status: "pending",
+          summary: `Delete journal entry from ${entry.date}: "${preview}"`,
+          confirm: async () => {
+            try {
+              await hooks.journal.deleteEntry(action.id);
+              return {
+                action,
+                status: "applied",
+                summary: `Deleted journal entry from ${entry.date}`,
+              };
+            } catch (err) {
+              return {
+                action,
+                status: "failed",
+                summary: `Delete journal entry from ${entry.date}`,
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
           },
         };
       }

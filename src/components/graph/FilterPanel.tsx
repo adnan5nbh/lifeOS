@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { NodeType, NODE_COLORS, NODE_TYPE_LABELS, FilterState } from "@/lib/graph/types";
 import { GraphCluster } from "@/lib/graph/types";
 
@@ -13,14 +14,31 @@ interface Props {
   edgeCount: number;
   onRunClusters: () => void;
   clusterRunning: boolean;
+  onClearAll: () => Promise<void>;
 }
 
-export default function FilterPanel({ filter, onChange, clusters, nodeCount, edgeCount, onRunClusters, clusterRunning }: Props) {
+export default function FilterPanel({ filter, onChange, clusters, nodeCount, edgeCount, onRunClusters, clusterRunning, onClearAll }: Props) {
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [clearing, setClearing] = useState(false);
+
   function toggleType(type: NodeType) {
     const types = filter.types.includes(type)
       ? filter.types.filter(t => t !== type)
       : [...filter.types, type];
     onChange({ ...filter, types });
+  }
+
+  async function handleClearAll() {
+    if (confirmText !== "DELETE") return;
+    setClearing(true);
+    try {
+      await onClearAll();
+      setShowClearConfirm(false);
+      setConfirmText("");
+    } finally {
+      setClearing(false);
+    }
   }
 
   return (
@@ -75,6 +93,46 @@ export default function FilterPanel({ filter, onChange, clusters, nodeCount, edg
       <div className="border-t border-slate-700/50 pt-3 text-[11px] text-slate-500 space-y-0.5">
         <p>{nodeCount} nodes · {edgeCount} connections</p>
         <p className="text-slate-600">Drag nodes · Scroll to zoom</p>
+      </div>
+
+      <div className="border-t border-slate-700/50 pt-3">
+        {!showClearConfirm ? (
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            disabled={nodeCount === 0}
+            className="w-full rounded-lg border border-rose-900/50 py-1.5 text-[11px] text-rose-500/60 hover:border-rose-700 hover:text-rose-400 disabled:opacity-30 transition"
+          >
+            Clear All Nodes
+          </button>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-[11px] text-rose-400">
+              This will delete your entire knowledge graph. Type <span className="font-mono font-bold">DELETE</span> to confirm:
+            </p>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={e => setConfirmText(e.target.value)}
+              placeholder="Type DELETE"
+              className="rounded-lg border border-rose-800/60 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:border-rose-500 focus:outline-none"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowClearConfirm(false); setConfirmText(""); }}
+                className="flex-1 rounded-lg border border-slate-600 py-1 text-[11px] text-slate-400 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearAll}
+                disabled={confirmText !== "DELETE" || clearing}
+                className="flex-1 rounded-lg border border-rose-500/40 bg-rose-500/10 py-1 text-[11px] text-rose-300 hover:bg-rose-500/20 disabled:opacity-30 transition"
+              >
+                {clearing ? "Clearing…" : "Clear All"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
