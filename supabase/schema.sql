@@ -120,3 +120,115 @@ create index if not exists journal_entries_user_date_idx
   on public.journal_entries (user_id, date);
 create index if not exists chat_messages_user_created_idx
   on public.chat_messages (user_id, created_at);
+
+-- ============================================================
+-- Graph / Knowledge Graph tables
+-- ============================================================
+create table if not exists public.graph_nodes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  label text not null,
+  type text not null check (type in ('activity','emotion','person','concept','anxiety','achievement','place')),
+  weight integer not null default 1,
+  pos_x real,
+  pos_y real,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.graph_edges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  source_id uuid not null references public.graph_nodes (id) on delete cascade,
+  target_id uuid not null references public.graph_nodes (id) on delete cascade,
+  strength real not null default 0.3,
+  created_at timestamptz not null default now(),
+  unique (user_id, source_id, target_id)
+);
+
+create table if not exists public.graph_clusters (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  label text not null,
+  node_ids uuid[] not null default '{}',
+  color text not null default '#6366f1',
+  created_at timestamptz not null default now()
+);
+
+-- ============================================================
+-- MindSpace tables
+-- ============================================================
+create table if not exists public.mindspace_checkins (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  date text not null,
+  valence real not null default 0,
+  arousal real not null default 0,
+  perma_p integer not null default 5,
+  perma_e integer not null default 5,
+  perma_r integer not null default 5,
+  perma_m integer not null default 5,
+  perma_a integer not null default 5,
+  cognitive_load integer not null default 5,
+  sentiment text not null default '',
+  created_at timestamptz not null default now(),
+  unique (user_id, date)
+);
+
+create table if not exists public.clinical_assessments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  type text not null check (type in ('phq9','gad7')),
+  scores jsonb not null default '[]',
+  total_score integer not null default 0,
+  assessed_at timestamptz not null default now()
+);
+
+create table if not exists public.correlation_insights (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  content text not null,
+  chart_data jsonb,
+  reaction text check (reaction in ('makes_sense','surprising')),
+  created_at timestamptz not null default now()
+);
+
+-- RLS
+alter table public.graph_nodes enable row level security;
+alter table public.graph_edges enable row level security;
+alter table public.graph_clusters enable row level security;
+alter table public.mindspace_checkins enable row level security;
+alter table public.clinical_assessments enable row level security;
+alter table public.correlation_insights enable row level security;
+
+create policy "graph_nodes_select_own"     on public.graph_nodes for select using (auth.uid() = user_id);
+create policy "graph_nodes_insert_own"     on public.graph_nodes for insert with check (auth.uid() = user_id);
+create policy "graph_nodes_update_own"     on public.graph_nodes for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "graph_nodes_delete_own"     on public.graph_nodes for delete using (auth.uid() = user_id);
+
+create policy "graph_edges_select_own"     on public.graph_edges for select using (auth.uid() = user_id);
+create policy "graph_edges_insert_own"     on public.graph_edges for insert with check (auth.uid() = user_id);
+create policy "graph_edges_update_own"     on public.graph_edges for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "graph_edges_delete_own"     on public.graph_edges for delete using (auth.uid() = user_id);
+
+create policy "graph_clusters_select_own"  on public.graph_clusters for select using (auth.uid() = user_id);
+create policy "graph_clusters_insert_own"  on public.graph_clusters for insert with check (auth.uid() = user_id);
+create policy "graph_clusters_update_own"  on public.graph_clusters for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "graph_clusters_delete_own"  on public.graph_clusters for delete using (auth.uid() = user_id);
+
+create policy "mindspace_checkins_select_own" on public.mindspace_checkins for select using (auth.uid() = user_id);
+create policy "mindspace_checkins_insert_own" on public.mindspace_checkins for insert with check (auth.uid() = user_id);
+create policy "mindspace_checkins_update_own" on public.mindspace_checkins for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "clinical_assessments_select_own" on public.clinical_assessments for select using (auth.uid() = user_id);
+create policy "clinical_assessments_insert_own" on public.clinical_assessments for insert with check (auth.uid() = user_id);
+
+create policy "correlation_insights_select_own" on public.correlation_insights for select using (auth.uid() = user_id);
+create policy "correlation_insights_insert_own" on public.correlation_insights for insert with check (auth.uid() = user_id);
+create policy "correlation_insights_update_own" on public.correlation_insights for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "correlation_insights_delete_own" on public.correlation_insights for delete using (auth.uid() = user_id);
+
+create index if not exists graph_nodes_user_idx           on public.graph_nodes (user_id);
+create index if not exists graph_edges_user_idx           on public.graph_edges (user_id);
+create index if not exists mindspace_checkins_user_date   on public.mindspace_checkins (user_id, date);
+create index if not exists clinical_user_type_idx         on public.clinical_assessments (user_id, type, assessed_at);
+create index if not exists correlation_user_created_idx   on public.correlation_insights (user_id, created_at);

@@ -73,6 +73,14 @@ export function useJournal() {
 
     const entry = rowToEntry(data as EntryRow);
     setEntries((prev) => [entry, ...prev]);
+
+    // Fire-and-forget: extract concepts into knowledge graph
+    fetch("/api/graph/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content, date }),
+    }).catch(() => {});
+
     return entry;
   }
 
