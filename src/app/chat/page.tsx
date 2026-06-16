@@ -2,24 +2,67 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChatHistory } from "@/lib/chat/useChatHistory";
+import { useEvents } from "@/lib/calendar/useEvents";
+import { useHealthData } from "@/lib/health/useHealthData";
+import { useQuickNotes } from "@/lib/notes/useQuickNotes";
+import { useJournal } from "@/lib/notes/useJournal";
+import { applyAction, AssistantHooks } from "@/lib/assistant/applyActions";
+import { AssistantAction } from "@/lib/claude/tools";
+import { todayKey } from "@/lib/health/utils";
+
+const ACTIONS_MARKER = "\n\n[[LIFEOS_TOOL_CALLS]]\n";
 
 export default function ChatPage() {
-  const { messages, loaded, addLocalMessage, updateLastMessage } = useChatHistory();
+  const { messages, loaded, addLocalMessage, updateLastMessage, appendToLastMessage } = useChatHistory();
+  const events = useEvents();
+  const health = useHealthData();
+  const notes = useQuickNotes();
+  const journal = useJournal();
+  const hooks: AssistantHooks = { events, health, notes, journal };
+
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [processingActions, setProcessingActions] = useState(false);
   const idCounter = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  async function applyActionsSequentially(actions: AssistantAction[]) {
+    setProcessingActions(true);
+    try {
+      for (let i = 0; i < actions.length; i++) {
+        if (i > 0) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
+
+        let result = await applyAction(actions[i], hooks);
+
+        // Auto-confirm destructive actions — Claude already got verbal consent in the conversation
+        if (result.status === "pending" && result.confirm) {
+          result = await result.confirm();
+        }
+
+        const icon = result.status === "applied" ? "✅" : "❌";
+        appendToLastMessage(`\n${icon} ${result.summary}`);
+      }
+    } finally {
+      setProcessingActions(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sending || processingActions) return;
 
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
     setSending(true);
 
     addLocalMessage({
@@ -39,79 +82,122 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, localDate: todayKey() }),
       });
 
-      if (!res.body) return;
+      if (!res.ok || !res.body) {
+        updateLastMessage("Something went wrong. Please try again.");
+        return;
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let assistantText = "";
+      let rawText = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        assistantText += decoder.decode(value, { stream: true });
-        updateLastMessage(assistantText);
+        rawText += decoder.decode(value, { stream: true });
+
+        // During streaming, show only the text portion (hide action marker if it arrives)
+        const markerIdx = rawText.indexOf(ACTIONS_MARKER);
+        updateLastMessage(markerIdx !== -1 ? rawText.slice(0, markerIdx) : rawText);
       }
+
+      // After stream completes, parse and apply any tool actions
+      const markerIdx = rawText.indexOf(ACTIONS_MARKER);
+      if (markerIdx !== -1) {
+        const displayText = rawText.slice(0, markerIdx);
+        updateLastMessage(displayText);
+
+        try {
+          const actions: AssistantAction[] = JSON.parse(rawText.slice(markerIdx + ACTIONS_MARKER.length));
+          if (actions.length > 0) {
+            await applyActionsSequentially(actions);
+          }
+        } catch {
+          // Malformed action JSON — ignore
+        }
+      }
+    } catch {
+      updateLastMessage("Something went wrong. Please try again.");
     } finally {
       setSending(false);
     }
   }
 
+  const isLoading = sending || processingActions;
+
   return (
-    <div className="flex flex-1 justify-center bg-slate-950">
-      <main className="flex w-full max-w-2xl flex-1 flex-col gap-4 px-4 py-8">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-100">Chat with Claude</h1>
-          <p className="text-sm text-slate-400">
-            Ask about your schedule, health trends, or journal — Claude has context on your LifeOS data.
-          </p>
-        </div>
+    <div className="flex flex-col bg-slate-950 h-[calc(100dvh-7.5rem)] sm:h-[calc(100dvh-3.5rem)]">
+      {/* Messages area */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        {!loaded && <p className="text-sm text-slate-500">Loading…</p>}
+        {loaded && messages.length === 0 && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+            <p className="text-3xl">💬</p>
+            <p className="text-sm font-semibold text-slate-200">Chat with your AI assistant</p>
+            <p className="max-w-xs text-xs text-slate-500">
+              Ask anything — analyse mood patterns, log food, add calendar events, or just have a conversation.
+            </p>
+          </div>
+        )}
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+              m.role === "user"
+                ? "ml-auto bg-indigo-500 text-white"
+                : "mr-auto bg-slate-800 text-slate-100"
+            }`}
+          >
+            {m.content || (m.role === "assistant" ? <span className="italic text-slate-500">…</span> : "")}
+          </div>
+        ))}
+        <div ref={bottomRef} />
+      </div>
 
-        <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-4">
-          {!loaded && <p className="text-sm text-slate-500">Loading…</p>}
-          {loaded && messages.length === 0 && (
-            <p className="text-sm text-slate-500">Say hello to get started.</p>
-          )}
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                m.role === "user"
-                  ? "self-end bg-indigo-500/20 text-slate-100"
-                  : "self-start bg-slate-800 text-slate-100"
-              }`}
-            >
-              {m.content || (m.role === "assistant" ? "…" : "")}
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex gap-2 border-t border-slate-700 pt-3">
+      {/* Input area */}
+      <div className="shrink-0 border-t border-slate-700 bg-slate-900 px-3 py-2.5">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2">
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && e.shiftKey) {
                 e.preventDefault();
-                handleSubmit(e);
+                handleSubmit(e as unknown as React.FormEvent);
               }
             }}
-            placeholder="Ask Claude anything… (Shift+Enter to send)"
-            rows={2}
-            className="flex-1 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none"
+            onInput={(e) => {
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+            }}
+            placeholder="Message… (Shift+Enter to send)"
+            rows={1}
+            style={{ resize: "none" }}
+            disabled={isLoading}
+            className="flex-1 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none disabled:opacity-60"
           />
           <button
             type="submit"
-            disabled={sending}
-            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:opacity-50"
+            disabled={isLoading || !input.trim()}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white transition hover:bg-indigo-400 disabled:opacity-50"
+            aria-label="Send"
           >
-            Send
+            {isLoading ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path d="M3.105 2.288a.75.75 0 00-.826.95l1.414 4.926A1.5 1.5 0 005.135 9.25h6.115a.75.75 0 010 1.5H5.135a1.5 1.5 0 00-1.442 1.086l-1.414 4.926a.75.75 0 00.826.95 28.897 28.897 0 0015.293-7.155.75.75 0 000-1.114A28.897 28.897 0 003.105 2.288z" />
+              </svg>
+            )}
           </button>
         </form>
-      </main>
+        <p className="mt-1 text-center text-[10px] text-slate-600">Shift+Enter to send · Enter for new line</p>
+      </div>
     </div>
   );
 }

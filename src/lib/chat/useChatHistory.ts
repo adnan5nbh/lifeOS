@@ -65,5 +65,14 @@ export function useChatHistory() {
     });
   }
 
-  return { messages, loaded, addLocalMessage, updateLastMessage };
+  function appendToLastMessage(suffix: string) {
+    setMessages((prev) => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      next[next.length - 1] = { ...next[next.length - 1], content: next[next.length - 1].content + suffix };
+      return next;
+    });
+  }
+
+  return { messages, loaded, addLocalMessage, updateLastMessage, appendToLastMessage };
 }
