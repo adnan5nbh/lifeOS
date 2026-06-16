@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatHistory } from "@/lib/chat/useChatHistory";
 
 export default function ChatPage() {
@@ -8,6 +8,11 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const idCounter = useRef(0);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,6 +86,7 @@ export default function ChatPage() {
               {m.content || (m.role === "assistant" ? "…" : "")}
             </div>
           ))}
+          <div ref={bottomRef} />
         </div>
 
         <form onSubmit={handleSubmit} className="flex gap-2 border-t border-slate-700 pt-3">
@@ -88,12 +94,12 @@ export default function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter" && e.shiftKey) {
                 e.preventDefault();
                 handleSubmit(e);
               }
             }}
-            placeholder="Ask Claude anything about your LifeOS data…"
+            placeholder="Ask Claude anything… (Shift+Enter to send)"
             rows={2}
             className="flex-1 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-100 focus:border-indigo-400 focus:outline-none"
           />

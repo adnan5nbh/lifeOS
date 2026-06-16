@@ -191,7 +191,6 @@ export const ASSISTANT_TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: "object",
       properties: {},
-      required: [],
     },
   },
   {
