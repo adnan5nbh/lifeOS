@@ -10,15 +10,19 @@ interface Props {
   onClose: () => void;
   onDelete: (id: string) => void;
   onRename: (id: string, label: string) => void;
+  onUpdateNotes: (id: string, notes: string) => void;
 }
 
-export default function NodeSidePanel({ node, checkins, onClose, onDelete, onRename }: Props) {
+export default function NodeSidePanel({ node, checkins, onClose, onDelete, onRename, onUpdateNotes }: Props) {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [coOccurring, setCoOccurring] = useState<string[]>([]);
   const [journalEntries, setJournalEntries] = useState<{id: string; date: string; content: string}[]>([]);
   const [analysing, setAnalysing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [newLabel, setNewLabel] = useState(node.label);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesText, setNotesText] = useState(node.notes ?? "");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const color = NODE_COLORS[node.type] ?? "#6366f1";
 
@@ -38,6 +42,16 @@ export default function NodeSidePanel({ node, checkins, onClose, onDelete, onRen
       }
     } finally {
       setAnalysing(false);
+    }
+  }
+
+  async function saveNotes() {
+    setSavingNotes(true);
+    try {
+      onUpdateNotes(node.id, notesText);
+      setEditingNotes(false);
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -91,6 +105,49 @@ export default function NodeSidePanel({ node, checkins, onClose, onDelete, onRen
         >
           🗑 Delete
         </button>
+      </div>
+
+      {/* Personal Notes */}
+      <div>
+        <p className="mb-1.5 text-xs font-semibold text-slate-400">Personal Notes</p>
+        {editingNotes ? (
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={notesText}
+              onChange={e => setNotesText(e.target.value)}
+              placeholder="Add your thoughts about this concept…"
+              rows={3}
+              className="w-full resize-none rounded-lg border border-slate-600 bg-slate-800 px-2.5 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={saveNotes}
+                disabled={savingNotes}
+                className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {savingNotes ? "Saving…" : "Save"}
+              </button>
+              <button
+                onClick={() => { setNotesText(node.notes ?? ""); setEditingNotes(false); }}
+                className="rounded-lg bg-slate-800 px-3 py-1 text-xs text-slate-400 hover:text-slate-200"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingNotes(true)}
+            className="w-full rounded-lg border border-dashed border-slate-700 p-2.5 text-left hover:border-slate-600"
+          >
+            {node.notes ? (
+              <p className="text-xs text-slate-300">{node.notes}</p>
+            ) : (
+              <p className="text-xs text-slate-500">+ Add a note about this concept…</p>
+            )}
+          </button>
+        )}
       </div>
 
       {avgValence !== null && (

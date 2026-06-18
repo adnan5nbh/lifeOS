@@ -39,15 +39,16 @@ export async function POST(request: Request) {
 
   const coOccurring = (connectedNodes ?? []).map((n: Record<string, unknown>) => n.label as string);
   const entryTexts = (entries ?? []).map((e: Record<string, unknown>) => `[${e.date}] ${e.content}`).join("\n\n");
+  const personalNotes = node.notes ? `\n\nUser's personal notes about this concept: "${node.notes}"` : "";
 
   const client = getClaudeClient();
   const msg = await client.messages.create({
     model: CLAUDE_MODEL,
     max_tokens: 600,
-    system: "You are a compassionate psychological analyst. Analyse what this concept means to the user based on their journal entries. Be insightful, personal, and constructive. 2-3 paragraphs max.",
+    system: "You are a compassionate psychological analyst. Analyse what this concept means to the user based on their journal entries and personal notes. Be insightful, personal, and constructive. 2-3 paragraphs max.",
     messages: [{
       role: "user",
-      content: `Concept: "${node.label}" (type: ${node.type})\n\nJournal entries mentioning this:\n\n${entryTexts || "(No entries found)"}\n\nWhat does this concept mean to me and how has my relationship with it evolved?`,
+      content: `Concept: "${node.label}" (type: ${node.type})${personalNotes}\n\nJournal entries mentioning this:\n\n${entryTexts || "(No entries found)"}\n\nWhat does this concept mean to me and how has my relationship with it evolved?`,
     }],
   });
 

@@ -15,12 +15,28 @@ export async function POST(request: Request) {
   const { content, date } = await request.json() as { content: string; date: string };
   if (!content) return Response.json({ error: "No content" }, { status: 400 });
 
+  // Fetch existing nodes so Claude can merge semantically similar ones instead of creating duplicates
+  const { data: existingNodes } = await supabase
+    .from("graph_nodes")
+    .select("label, type")
+    .eq("user_id", user.id)
+    .limit(200);
+
+  const existingList = (existingNodes ?? [])
+    .map((n: { label: string; type: string }) => `${n.label} (${n.type})`)
+    .join(", ");
+
+  const mergingInstruction = existingList
+    ? `\n\nExisting graph nodes: ${existingList}\n\nIMPORTANT: If a concept you extract is semantically equivalent to an existing node (e.g. "anxious" → "anxiety", "working out" → "gym", "feeling low" → "sadness", "jog" → "running"), reuse the EXACT existing label. Only create a new label for concepts genuinely absent from the existing list.`
+    : "";
+
   const client = getClaudeClient();
   const msg = await client.messages.create({
     model: CLAUDE_MODEL,
     max_tokens: 1024,
     system: `Extract the 5-15 most meaningful concepts from this journal entry and return ONLY valid JSON.
-Types: activity (things done), emotion (feelings), person (names), concept (ideas/themes), anxiety (worries/triggers), achievement (accomplishments), place (locations).
+Types: activity (things done), emotion (feelings), person (names), concept (ideas/themes), anxiety (worries/triggers), achievement (accomplishments), place (locations).${mergingInstruction}
+
 Return: {"nodes": [{"label": "string", "type": "one of the types above"}], "edges": [{"source": "label", "target": "label"}]}
 Edges connect concepts that appear together meaningfully. Be selective — quality over quantity.`,
     messages: [{ role: "user", content }],
@@ -35,7 +51,7 @@ Edges connect concepts that appear together meaningfully. Be selective — quali
 
   const validNodes = (extracted.nodes ?? []).filter(n => n.label && VALID_TYPES.includes(n.type));
 
-  // Upsert each node: increment weight if exists, insert if not
+  // Upsert each node: merge by label only (case-insensitive) to prevent semantic duplicates
   const nodeIdMap: Record<string, string> = {};
   for (const n of validNodes) {
     const { data: existing } = await supabase
@@ -43,7 +59,6 @@ Edges connect concepts that appear together meaningfully. Be selective — quali
       .select("id, weight")
       .eq("user_id", user.id)
       .ilike("label", n.label)
-      .eq("type", n.type)
       .maybeSingle();
 
     if (existing) {
@@ -72,8 +87,7 @@ Edges connect concepts that appear together meaningfully. Be selective — quali
       .maybeSingle();
 
     if (existingEdge) {
-      const newStrength = Math.min(1, existingEdge.strength + 0.1);
-      await supabase.from("graph_edges").update({ strength: newStrength }).eq("id", existingEdge.id);
+      await supabase.from("graph_edges").update({ strength: Math.min(1, existingEdge.strength + 0.1) }).eq("id", existingEdge.id);
     } else {
       await supabase.from("graph_edges")
         .insert({ user_id: user.id, source_id: srcId, target_id: tgtId, strength: 0.3 });

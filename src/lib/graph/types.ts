@@ -34,6 +34,7 @@ export interface GraphNode {
   label: string;
   type: NodeType;
   weight: number;
+  notes?: string | null;
   pos_x?: number | null;
   pos_y?: number | null;
   created_at?: string;

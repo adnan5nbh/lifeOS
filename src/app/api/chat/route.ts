@@ -1,9 +1,15 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { getClaudeClient, CLAUDE_MODEL } from "@/lib/claude/client";
 import { ASSISTANT_TOOLS, AssistantAction } from "@/lib/claude/tools";
 import { todayKey, lastNDays } from "@/lib/health/utils";
 
 const ACTIONS_MARKER = "\n\n[[LIFEOS_TOOL_CALLS]]\n";
+
+// Static instructions are sent once and cached by Claude's prompt caching
+const STATIC_INSTRUCTIONS = `You are LifeOS's personal assistant. You can both have conversations AND take actions — creating journal entries, logging food/exercise, adding calendar events, updating steps, editing or deleting entries, and managing the knowledge graph. When the user asks you to do something, use the appropriate tools. When they want to talk or ask questions, respond conversationally. Always provide a brief text response alongside any tool calls so the user knows what's happening (e.g. "Adding that calendar event now…" or "Done! I've logged your meal.").
+
+For destructive actions (delete_journal_entry, delete_graph_node, clear_all_graph_nodes): first describe what you will do in text and ask the user to confirm before calling the tool. Only call destructive tools once the user has explicitly agreed in their message (e.g. "yes", "go ahead", "confirm", "delete it").`;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -29,34 +35,76 @@ export async function POST(request: Request) {
 
   await supabase.from("chat_messages").insert({ user_id: user.id, role: "user", content: message });
 
+  // Topic detection — only fetch and send relevant context sections
+  const msgLower = message.toLowerCase();
+  const topicHealth = /\b(exercise|workout|gym|step|calorie|food|ate|eat|protein|weight|run|walk|ran|walked|fitness|diet|nutrition|meal|breakfast|lunch|dinner|fat|carb|log)\b/.test(msgLower);
+  const topicCalendar = /\b(calendar|schedule|event|appointment|plan|when|tomorrow|next week|remind|meeting|agenda|deadline)\b/.test(msgLower);
+  const topicJournal = /\b(journal|mood|feel|feeling|anxious|stress|reflect|note|emotion|anxiety|worry|mental|emotional)\b/.test(msgLower);
+  const topicSpecific = topicHealth || topicCalendar || topicJournal;
+
+  // If a specific topic is detected, only include relevant sections to save tokens
+  const needsHealth = !topicSpecific || topicHealth;
+  const needsCalendar = !topicSpecific || topicCalendar;
+  const needsJournal = !topicSpecific || topicJournal;
+
   const today = localDate || todayKey();
   const recentDays = lastNDays(7);
 
-  const [{ data: events }, { data: healthLogs }, { data: goals }, { data: journal }, { data: history }, { data: journalWithIds }] =
-    await Promise.all([
-      supabase.from("calendar_events").select("title, date, start_time, end_time, kind").order("date", { ascending: true }),
-      supabase.from("health_logs").select("date, steps, exercises, food").in("date", recentDays),
-      supabase.from("health_goals").select("step_goal, calorie_goal, protein_goal").maybeSingle(),
-      supabase.from("journal_entries").select("date, content").order("date", { ascending: false }).limit(5),
-      supabase.from("chat_messages").select("role, content").order("created_at", { ascending: false }).limit(20),
-      supabase.from("journal_entries").select("id, date, content").order("date", { ascending: false }).limit(10),
-    ]);
+  // Calendar: only last 7 days through next 90 days (not all historical events)
+  const pastCutoff = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  })();
+  const futureCutoff = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 90);
+    return d.toISOString().slice(0, 10);
+  })();
 
-  const systemParts = [
-    `Today's date is ${today}.`,
-    "You are LifeOS's personal assistant. You can both have conversations AND take actions — creating journal entries, logging food/exercise, adding calendar events, updating steps, editing or deleting entries, and managing the knowledge graph. When the user asks you to do something, use the appropriate tools. When they want to talk or ask questions, respond conversationally. Always provide a brief text response alongside any tool calls so the user knows what's happening (e.g. \"Adding that calendar event now…\" or \"Done! I've logged your meal.\").",
-  ];
+  const [eventsRes, healthRes, goalsRes, journalRes, historyRes, journalIdsRes] = await Promise.all([
+    needsCalendar
+      ? supabase
+          .from("calendar_events")
+          .select("title, date, start_time, end_time, kind")
+          .gte("date", pastCutoff)
+          .lte("date", futureCutoff)
+          .order("date", { ascending: true })
+          .limit(25)
+      : Promise.resolve({ data: null }),
+    needsHealth
+      ? supabase.from("health_logs").select("date, steps, exercises, food").in("date", recentDays)
+      : Promise.resolve({ data: null }),
+    supabase.from("health_goals").select("step_goal, calorie_goal, protein_goal").maybeSingle(),
+    needsJournal
+      ? supabase.from("journal_entries").select("date, content").order("date", { ascending: false }).limit(5)
+      : Promise.resolve({ data: null }),
+    supabase.from("chat_messages").select("role, content").order("created_at", { ascending: false }).limit(20),
+    needsJournal
+      ? supabase.from("journal_entries").select("id, date, content").order("date", { ascending: false }).limit(10)
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const { data: events } = eventsRes;
+  const { data: healthLogs } = healthRes;
+  const { data: goals } = goalsRes;
+  const { data: journal } = journalRes;
+  const { data: history } = historyRes;
+  const { data: journalWithIds } = journalIdsRes;
+
+  // Build dynamic context (fresh per-request, not cached)
+  const dynamicParts: string[] = [`Today's date is ${today}.`];
 
   if (events && events.length > 0) {
-    systemParts.push(
-      "Calendar events:\n" +
+    dynamicParts.push(
+      "Upcoming calendar events:\n" +
         events.map((e) => `- ${e.date} ${e.start_time}-${e.end_time}: ${e.title} (${e.kind})`).join("\n")
     );
   }
 
   if (healthLogs && healthLogs.length > 0) {
-    systemParts.push(
-      "Recent health logs (last 7 days):\n" +
+    dynamicParts.push(
+      "Health logs (last 7 days):\n" +
         healthLogs
           .map((log) => {
             const calories = (log.food ?? []).reduce((s: number, f: { calories: number }) => s + f.calories, 0);
@@ -68,42 +116,39 @@ export async function POST(request: Request) {
   }
 
   if (goals) {
-    systemParts.push(
+    dynamicParts.push(
       `Goals: ${goals.step_goal} steps/day, ${goals.calorie_goal} kcal/day, ${goals.protein_goal}g protein/day.`
     );
   }
 
   if (journal && journal.length > 0) {
-    systemParts.push(
+    dynamicParts.push(
       "Recent journal entries:\n" + journal.map((j) => `- ${j.date}: ${j.content}`).join("\n")
     );
   }
 
   if (journalWithIds && journalWithIds.length > 0) {
-    systemParts.push(
-      "Journal entries with IDs (use the ID when calling edit_journal_entry or delete_journal_entry):\n" +
+    dynamicParts.push(
+      "Journal entries with IDs (use for edit/delete):\n" +
         journalWithIds
-          .map((j: { id: string; date: string; content: string }) => `- [ID: ${j.id}] ${j.date}: ${j.content.slice(0, 200)}`)
+          .map((j: { id: string; date: string; content: string }) => `- [ID: ${j.id}] ${j.date}: ${j.content.slice(0, 150)}`)
           .join("\n")
     );
   }
 
-  systemParts.push(
-    "For destructive actions (delete_journal_entry, delete_graph_node, clear_all_graph_nodes): first describe what you will do in text and ask the user to confirm before calling the tool. Only call destructive tools once the user has explicitly agreed in their message (e.g. \"yes\", \"go ahead\", \"confirm\", \"delete it\")."
-  );
+  const dynamicContext = dynamicParts.join("\n\n");
 
-  const system = systemParts.join("\n\n");
+  // Static instructions get cached by Claude (saves tokens on repeat messages)
+  const systemContent: Anthropic.Messages.TextBlockParam[] = [
+    { type: "text", text: STATIC_INSTRUCTIONS, cache_control: { type: "ephemeral" } },
+    { type: "text", text: dynamicContext },
+  ];
 
   const conversationHistory = (history ?? [])
     .slice()
     .reverse()
     .map((m, i, arr) => {
-      // Replace the last user message with a vision block if an image was attached
-      if (
-        imageAttachment &&
-        i === arr.length - 1 &&
-        m.role === "user"
-      ) {
+      if (imageAttachment && i === arr.length - 1 && m.role === "user") {
         return {
           role: "user" as const,
           content: [
@@ -128,7 +173,7 @@ export async function POST(request: Request) {
       model: CLAUDE_MODEL,
       max_tokens: 4096,
       thinking: { type: "adaptive" },
-      system,
+      system: systemContent,
       tools: ASSISTANT_TOOLS,
       messages: conversationHistory,
     });
@@ -162,7 +207,9 @@ export async function POST(request: Request) {
           await supabase.from("chat_messages").insert({
             user_id: user.id,
             role: "assistant",
-            content: assistantText || (actions.length > 0 ? `(${actions.length} action${actions.length > 1 ? "s" : ""} taken)` : "(no response)"),
+            content:
+              assistantText ||
+              (actions.length > 0 ? `(${actions.length} action${actions.length > 1 ? "s" : ""} taken)` : "(no response)"),
           });
         } catch (err) {
           console.error("Claude chat stream error:", err);

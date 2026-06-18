@@ -134,6 +134,7 @@ export default function GraphPage() {
             onClose={() => { setSelectedNode(null); setSidePanel("filter"); }}
             onDelete={async (id) => { await graph.deleteNode(id); setSelectedNode(null); setSidePanel("filter"); }}
             onRename={async (id, label) => { await graph.renameNode(id, label); setSelectedNode(prev => prev ? { ...prev, label } : null); }}
+            onUpdateNotes={async (id, notes) => { await graph.updateNodeNotes(id, notes); setSelectedNode(prev => prev ? { ...prev, notes } : null); }}
           />
         ) : (
           <div className="p-4">
@@ -167,6 +168,7 @@ export default function GraphPage() {
             onClose={() => setSelectedNode(null)}
             onDelete={async (id) => { await graph.deleteNode(id); setSelectedNode(null); }}
             onRename={async (id, label) => { await graph.renameNode(id, label); setSelectedNode(prev => prev ? { ...prev, label } : null); }}
+            onUpdateNotes={async (id, notes) => { await graph.updateNodeNotes(id, notes); setSelectedNode(prev => prev ? { ...prev, notes } : null); }}
           />
         </div>
       )}

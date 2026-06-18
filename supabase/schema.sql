@@ -130,6 +130,7 @@ create table if not exists public.graph_nodes (
   label text not null,
   type text not null check (type in ('activity','emotion','person','concept','anxiety','achievement','place')),
   weight integer not null default 1,
+  notes text,
   pos_x real,
   pos_y real,
   created_at timestamptz not null default now()

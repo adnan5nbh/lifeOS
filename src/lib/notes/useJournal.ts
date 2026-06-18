@@ -81,6 +81,25 @@ export function useJournal() {
       body: JSON.stringify({ content, date }),
     }).catch(() => {});
 
+    // Log as a scheduled activity so it appears on the Schedule page
+    const now = new Date();
+    const eventDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const startH = String(now.getHours()).padStart(2, "0");
+    const startM = String(now.getMinutes()).padStart(2, "0");
+    const endMin = now.getMinutes() + 15;
+    const endH = String(now.getHours() + Math.floor(endMin / 60)).padStart(2, "0");
+    const endM = String(endMin % 60).padStart(2, "0");
+    void supabase.from("calendar_events").insert({
+      user_id: user.id,
+      title: "Journal Entry",
+      date: eventDate,
+      start_time: `${startH}:${startM}`,
+      end_time: `${endH}:${endM}`,
+      kind: "activity",
+      recurrence: null,
+      completed_dates: [],
+    });
+
     return entry;
   }
 

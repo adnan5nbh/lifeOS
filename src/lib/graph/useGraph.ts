@@ -82,6 +82,11 @@ export function useGraph() {
     setNodes(prev => prev.map(n => n.id === id ? { ...n, label } : n));
   }
 
+  async function updateNodeNotes(id: string, notes: string): Promise<void> {
+    await supabase.from("graph_nodes").update({ notes }).eq("id", id);
+    setNodes(prev => prev.map(n => n.id === id ? { ...n, notes } : n));
+  }
+
   async function upsertEdge(sourceId: string, targetId: string, strengthDelta = 0.15): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -124,5 +129,5 @@ export function useGraph() {
     setNodes([]);
   }
 
-  return { nodes, edges, clusters, loaded, addNode, deleteNode, renameNode, upsertEdge, saveClusters, clearAll };
+  return { nodes, edges, clusters, loaded, addNode, deleteNode, renameNode, updateNodeNotes, upsertEdge, saveClusters, clearAll };
 }

@@ -68,6 +68,26 @@ export function useQuickNotes() {
 
     const note = rowToNote(data as NoteRow);
     setNotes((prev) => [note, ...prev]);
+
+    // Log as a scheduled activity so it appears on the Schedule page
+    const now = new Date();
+    const eventDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const startH = String(now.getHours()).padStart(2, "0");
+    const startM = String(now.getMinutes()).padStart(2, "0");
+    const endMin = now.getMinutes() + 15;
+    const endH = String(now.getHours() + Math.floor(endMin / 60)).padStart(2, "0");
+    const endM = String(endMin % 60).padStart(2, "0");
+    void supabase.from("calendar_events").insert({
+      user_id: user.id,
+      title: "Quick Note",
+      date: eventDate,
+      start_time: `${startH}:${startM}`,
+      end_time: `${endH}:${endM}`,
+      kind: "activity",
+      recurrence: null,
+      completed_dates: [],
+    });
+
     return note;
   }
 
