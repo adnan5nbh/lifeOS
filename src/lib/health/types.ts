@@ -32,11 +32,20 @@ export interface FoodEntry {
   servingSize?: string;
 }
 
+export interface GoogleFitData {
+  stepsFromFit?: number;
+  sleepMinutes?: number;
+  activeMinutes?: number;
+  heartRateBpm?: number;
+  syncedAt?: string;
+}
+
 export interface DayLog {
   date: string; // YYYY-MM-DD
   steps: number;
   exercises: ExerciseEntry[];
   food: FoodEntry[];
+  googleFit?: GoogleFitData;
 }
 
 export interface Goals {

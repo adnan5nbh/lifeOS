@@ -6,4 +6,5 @@ export const NAV_LINKS = [
   { href: "/chat", label: "Chat", icon: "💬" },
   { href: "/graph", label: "Graph", icon: "🕸️" },
   { href: "/mindspace", label: "Mind", icon: "🧠" },
+  { href: "/settings", label: "Settings", icon: "⚙️" },
 ];

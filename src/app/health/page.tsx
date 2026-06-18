@@ -7,6 +7,7 @@ import WorkoutTracker from "@/components/health/WorkoutTracker";
 import FoodLogger from "@/components/health/FoodLogger";
 import ProgressGraphs from "@/components/health/ProgressGraphs";
 import GoalsPanel from "@/components/health/GoalsPanel";
+import GoogleFitPanel from "@/components/health/GoogleFitPanel";
 
 export default function HealthPage() {
   const { logs, todayLog, goals, setGoals, updateToday, loaded } = useHealthData();
@@ -66,6 +67,8 @@ export default function HealthPage() {
         </header>
 
         <DailySummary log={todayLog} goals={goals} onStepsChange={setSteps} />
+
+        {todayLog.googleFit && <GoogleFitPanel data={todayLog.googleFit} />}
 
         <WorkoutTracker
           exercises={todayLog.exercises}

@@ -16,6 +16,7 @@ type LogRow = {
   steps: number;
   exercises: DayLog["exercises"];
   food: DayLog["food"];
+  google_fit: DayLog["googleFit"] | null;
 };
 
 type GoalsRow = {
@@ -30,6 +31,7 @@ function rowToLog(row: LogRow): DayLog {
     steps: row.steps,
     exercises: row.exercises ?? [],
     food: row.food ?? [],
+    googleFit: row.google_fit ?? undefined,
   };
 }
 
@@ -94,7 +96,7 @@ export function useHealthData() {
       }
 
       const [{ data: logRows }, { data: goalsRow }] = await Promise.all([
-        supabase.from("health_logs").select("date, steps, exercises, food"),
+        supabase.from("health_logs").select("date, steps, exercises, food, google_fit"),
         supabase.from("health_goals").select("step_goal, calorie_goal, protein_goal").maybeSingle(),
       ]);
 

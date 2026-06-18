@@ -21,6 +21,7 @@ create table if not exists public.health_logs (
   steps integer not null default 0,
   exercises jsonb not null default '[]'::jsonb,
   food jsonb not null default '[]'::jsonb,
+  google_fit jsonb,
   created_at timestamptz not null default now(),
   unique (user_id, date)
 );
@@ -124,6 +125,29 @@ create index if not exists chat_messages_user_created_idx
 -- ============================================================
 -- Graph / Knowledge Graph tables
 -- ============================================================
+-- ============================================================
+-- Google Fit OAuth tokens
+-- ============================================================
+create table if not exists public.google_fit_tokens (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  access_token text not null,
+  refresh_token text,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.google_fit_tokens enable row level security;
+
+create policy "google_fit_tokens_select_own" on public.google_fit_tokens
+  for select using (auth.uid() = user_id);
+create policy "google_fit_tokens_insert_own" on public.google_fit_tokens
+  for insert with check (auth.uid() = user_id);
+create policy "google_fit_tokens_update_own" on public.google_fit_tokens
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "google_fit_tokens_delete_own" on public.google_fit_tokens
+  for delete using (auth.uid() = user_id);
+
 create table if not exists public.graph_nodes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
