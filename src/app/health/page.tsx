@@ -2,35 +2,54 @@
 
 import { useEffect } from "react";
 import { useHealthData } from "@/lib/health/useHealthData";
-import { ExerciseEntry, FoodEntry } from "@/lib/health/types";
-import DailySummary from "@/components/health/DailySummary";
-import WorkoutTracker from "@/components/health/WorkoutTracker";
-import FoodLogger from "@/components/health/FoodLogger";
-import ProgressGraphs from "@/components/health/ProgressGraphs";
-import GoalsPanel from "@/components/health/GoalsPanel";
-import GoogleFitPanel from "@/components/health/GoogleFitPanel";
+import { useEmotionLogs } from "@/lib/health/useEmotionLogs";
+import { useWeightLogs } from "@/lib/health/useWeightLogs";
+import { useTodayWorkout } from "@/lib/health/useTodayWorkout";
+import { useFocusSessions } from "@/lib/focus/useFocusSessions";
+import { FoodEntry } from "@/lib/health/types";
+import CoachWidget from "@/components/health/CoachWidget";
+import VitalsCard from "@/components/health/VitalsCard";
+import NutritionCard from "@/components/health/NutritionCard";
+import WorkoutCard from "@/components/health/WorkoutCard";
+import WeightTracker from "@/components/health/WeightTracker";
+import StatisticsSection from "@/components/health/StatisticsSection";
+import HealthSettingsSection from "@/components/health/HealthSettingsSection";
 
-const HEVY_AUTO_SYNC_KEY = "lifeos.hevy.lastAutoSync";
-const HEVY_AUTO_SYNC_INTERVAL = 30 * 60 * 1000; // 30 minutes
+const FIT_SYNC_KEY = "lifeos.fit.lastAutoSync";
+const HEVY_SYNC_KEY = "lifeos.hevy.lastAutoSync";
+const AUTO_SYNC_INTERVAL = 30 * 60 * 1000; // 30 min
 
-function useHevyAutoSync() {
-  useEffect(() => {
-    const last = localStorage.getItem(HEVY_AUTO_SYNC_KEY);
-    const shouldSync = !last || Date.now() - parseInt(last) > HEVY_AUTO_SYNC_INTERVAL;
-    if (!shouldSync) return;
-
-    fetch("/api/hevy/sync", { method: "POST" })
-      .then((r) => r.json())
-      .then((d: { ok?: boolean }) => {
-        if (d.ok) localStorage.setItem(HEVY_AUTO_SYNC_KEY, Date.now().toString());
-      })
-      .catch(() => {});
-  }, []);
+function shouldSync(key: string): boolean {
+  const last = localStorage.getItem(key);
+  return !last || Date.now() - parseInt(last) > AUTO_SYNC_INTERVAL;
 }
 
 export default function HealthPage() {
-  const { logs, todayLog, goals, setGoals, updateToday, loaded } = useHealthData();
-  useHevyAutoSync();
+  const { todayLog, logs, goals, setGoals, updateToday, loaded } = useHealthData();
+  const emotions = useEmotionLogs();
+  const weightLogs = useWeightLogs();
+  const workout = useTodayWorkout();
+  const focus = useFocusSessions();
+
+  // Background auto-sync Google Fit + Hevy on page load
+  useEffect(() => {
+    if (shouldSync(FIT_SYNC_KEY)) {
+      fetch("/api/fit/sync", { method: "POST" })
+        .then((r) => r.json())
+        .then((d: { ok?: boolean }) => {
+          if (d.ok) localStorage.setItem(FIT_SYNC_KEY, Date.now().toString());
+        })
+        .catch(() => {});
+    }
+    if (shouldSync(HEVY_SYNC_KEY)) {
+      fetch("/api/hevy/sync", { method: "POST" })
+        .then((r) => r.json())
+        .then((d: { ok?: boolean }) => {
+          if (d.ok) localStorage.setItem(HEVY_SYNC_KEY, Date.now().toString());
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   if (!loaded) {
     return (
@@ -38,24 +57,6 @@ export default function HealthPage() {
         Loading…
       </main>
     );
-  }
-
-  function setSteps(steps: number) {
-    updateToday((log) => ({ ...log, steps }));
-  }
-
-  function addExercise(exercise: Omit<ExerciseEntry, "id">) {
-    updateToday((log) => ({
-      ...log,
-      exercises: [...log.exercises, { ...exercise, id: crypto.randomUUID() }],
-    }));
-  }
-
-  function deleteExercise(id: string) {
-    updateToday((log) => ({
-      ...log,
-      exercises: log.exercises.filter((e) => e.id !== id),
-    }));
   }
 
   function addFood(entry: Omit<FoodEntry, "id">) {
@@ -66,10 +67,7 @@ export default function HealthPage() {
   }
 
   function deleteFood(id: string) {
-    updateToday((log) => ({
-      ...log,
-      food: log.food.filter((f) => f.id !== id),
-    }));
+    updateToday((log) => ({ ...log, food: log.food.filter((f) => f.id !== id) }));
   }
 
   const today = new Date().toLocaleDateString(undefined, {
@@ -80,32 +78,51 @@ export default function HealthPage() {
 
   return (
     <div className="flex flex-1 justify-center bg-slate-950">
-      <main className="flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
+      <main className="flex w-full max-w-2xl flex-col gap-5 px-4 py-8">
         <header>
           <h1 className="text-2xl font-bold text-slate-100">Health & Fitness</h1>
           <p className="text-sm text-slate-400">{today}</p>
         </header>
 
-        <DailySummary log={todayLog} goals={goals} onStepsChange={setSteps} />
-
-        {todayLog.googleFit && <GoogleFitPanel data={todayLog.googleFit} />}
-
-        <WorkoutTracker
-          exercises={todayLog.exercises}
-          onAdd={addExercise}
-          onDelete={deleteExercise}
+        <CoachWidget
+          log={todayLog}
+          goals={goals}
+          emotionScore={emotions.latestScore}
         />
 
-        <FoodLogger
+        <VitalsCard
+          log={todayLog}
+          goals={goals}
+          emotionLogs={emotions.todayLogs}
+          canLogEmotion={emotions.canLogMore}
+          onLogEmotion={emotions.logEmotion}
+        />
+
+        <NutritionCard
           food={todayLog.food}
           calorieGoal={goals.calorieGoal}
+          proteinGoal={goals.proteinGoal}
+          focusMinutes={focus.totalMinutes}
           onAdd={addFood}
           onDelete={deleteFood}
         />
 
-        <ProgressGraphs logs={logs} goals={goals} />
+        <WorkoutCard
+          workouts={workout.workouts}
+          muscleActivity={workout.muscleActivity}
+          workoutRating={workout.workoutRating}
+          totalSets={workout.totalSets}
+        />
 
-        <GoalsPanel goals={goals} onChange={setGoals} />
+        <WeightTracker
+          logs={weightLogs.logs}
+          latestWeight={weightLogs.latestWeight}
+          onLog={weightLogs.logWeight}
+        />
+
+        <StatisticsSection />
+
+        <HealthSettingsSection goals={goals} onGoalsChange={setGoals} />
       </main>
     </div>
   );

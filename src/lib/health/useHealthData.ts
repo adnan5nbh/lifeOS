@@ -23,6 +23,7 @@ type GoalsRow = {
   step_goal: number;
   calorie_goal: number;
   protein_goal: number;
+  sleep_goal: number;
 };
 
 function rowToLog(row: LogRow): DayLog {
@@ -40,6 +41,7 @@ function rowToGoals(row: GoalsRow): Goals {
     stepGoal: row.step_goal,
     calorieGoal: row.calorie_goal,
     proteinGoal: row.protein_goal,
+    sleepGoal: row.sleep_goal ?? 480,
   };
 }
 
@@ -58,7 +60,6 @@ export function useHealthData() {
       } = await supabase.auth.getUser();
       if (!user || cancelled) return;
 
-      // One-time migration of any locally-stored data into Supabase.
       if (!localStorage.getItem(MIGRATED_KEY)) {
         try {
           const rawLogs = localStorage.getItem(LOGS_KEY);
@@ -85,6 +86,7 @@ export function useHealthData() {
               step_goal: merged.stepGoal,
               calorie_goal: merged.calorieGoal,
               protein_goal: merged.proteinGoal,
+              sleep_goal: merged.sleepGoal,
             });
           }
         } catch {
@@ -97,7 +99,7 @@ export function useHealthData() {
 
       const [{ data: logRows }, { data: goalsRow }] = await Promise.all([
         supabase.from("health_logs").select("date, steps, exercises, food, google_fit"),
-        supabase.from("health_goals").select("step_goal, calorie_goal, protein_goal").maybeSingle(),
+        supabase.from("health_goals").select("step_goal, calorie_goal, protein_goal, sleep_goal").maybeSingle(),
       ]);
 
       if (cancelled) return;
@@ -118,6 +120,7 @@ export function useHealthData() {
           step_goal: DEFAULT_GOALS.stepGoal,
           calorie_goal: DEFAULT_GOALS.calorieGoal,
           protein_goal: DEFAULT_GOALS.proteinGoal,
+          sleep_goal: DEFAULT_GOALS.sleepGoal,
         });
       }
 
@@ -170,6 +173,7 @@ export function useHealthData() {
       step_goal: newGoals.stepGoal,
       calorie_goal: newGoals.calorieGoal,
       protein_goal: newGoals.proteinGoal,
+      sleep_goal: newGoals.sleepGoal,
     });
   }
 

@@ -52,12 +52,14 @@ export interface Goals {
   stepGoal: number;
   calorieGoal: number;
   proteinGoal: number;
+  sleepGoal: number; // minutes
 }
 
 export const DEFAULT_GOALS: Goals = {
   stepGoal: 8000,
   calorieGoal: 2200,
   proteinGoal: 150,
+  sleepGoal: 480, // 8 hours
 };
 
 export function emptyDayLog(date: string): DayLog {
