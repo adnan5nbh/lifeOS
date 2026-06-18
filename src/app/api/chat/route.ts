@@ -14,10 +14,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { message, localDate } = await request.json();
+  const { message, localDate, image } = await request.json();
   if (!message || typeof message !== "string") {
     return Response.json({ error: "Missing message" }, { status: 400 });
   }
+  const validMimeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+  type ValidMimeType = (typeof validMimeTypes)[number];
+  const imageAttachment =
+    image &&
+    typeof image.base64 === "string" &&
+    validMimeTypes.includes(image.mimeType as ValidMimeType)
+      ? { mimeType: image.mimeType as ValidMimeType, base64: image.base64 as string }
+      : null;
 
   await supabase.from("chat_messages").insert({ user_id: user.id, role: "user", content: message });
 
@@ -89,7 +97,30 @@ export async function POST(request: Request) {
   const conversationHistory = (history ?? [])
     .slice()
     .reverse()
-    .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+    .map((m, i, arr) => {
+      // Replace the last user message with a vision block if an image was attached
+      if (
+        imageAttachment &&
+        i === arr.length - 1 &&
+        m.role === "user"
+      ) {
+        return {
+          role: "user" as const,
+          content: [
+            {
+              type: "image" as const,
+              source: {
+                type: "base64" as const,
+                media_type: imageAttachment.mimeType,
+                data: imageAttachment.base64,
+              },
+            },
+            { type: "text" as const, text: m.content },
+          ],
+        };
+      }
+      return { role: m.role as "user" | "assistant", content: m.content };
+    });
 
   try {
     const client = getClaudeClient();

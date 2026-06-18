@@ -9,6 +9,9 @@ import { useJournal } from "@/lib/notes/useJournal";
 import { applyAction, AssistantHooks } from "@/lib/assistant/applyActions";
 import { AssistantAction } from "@/lib/claude/tools";
 import { todayKey } from "@/lib/health/utils";
+import VoiceInputButton from "@/components/assistant/VoiceInputButton";
+import AttachmentPicker, { ImageAttachment } from "@/components/assistant/AttachmentPicker";
+import { scanBarcodeFromImage } from "@/lib/barcode/scanBarcode";
 
 const ACTIONS_MARKER = "\n\n[[LIFEOS_TOOL_CALLS]]\n";
 
@@ -23,6 +26,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [processingActions, setProcessingActions] = useState(false);
+  const [pendingImage, setPendingImage] = useState<ImageAttachment | null>(null);
   const idCounter = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -54,6 +58,31 @@ export default function ChatPage() {
     }
   }
 
+  async function handleAttach(attachment: ImageAttachment) {
+    setPendingImage(attachment);
+    const barcode = await scanBarcodeFromImage(attachment.dataUrl);
+    if (barcode) {
+      try {
+        const res = await fetch(`/api/food-lookup?barcode=${encodeURIComponent(barcode)}`);
+        const data = await res.json();
+        if (data.found) {
+          const perLabel = data.per === "serving" ? "per serving" : "per 100g";
+          const info = `Scanned barcode for ${data.name}${data.brand ? ` (${data.brand})` : ""}${data.servingSize ? ` — ${data.servingSize}` : ""}: ${data.calories ?? "?"}kcal, ${data.protein ?? "?"}g protein, ${data.carbs ?? "?"}g carbs, ${data.fat ?? "?"}g fat ${perLabel}. Please log this food for today.`;
+          setInput(info);
+          setTimeout(() => {
+            const el = textareaRef.current;
+            if (el) {
+              el.style.height = "auto";
+              el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
+            }
+          }, 0);
+        }
+      } catch {
+        // Food lookup failed — keep image for manual description
+      }
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const text = input.trim();
@@ -63,6 +92,8 @@ export default function ChatPage() {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
+    const imageToSend = pendingImage;
+    setPendingImage(null);
     setSending(true);
 
     addLocalMessage({
@@ -82,7 +113,11 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, localDate: todayKey() }),
+        body: JSON.stringify({
+          message: text,
+          localDate: todayKey(),
+          image: imageToSend ? { mimeType: imageToSend.mimeType, base64: imageToSend.base64 } : undefined,
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -159,7 +194,30 @@ export default function ChatPage() {
 
       {/* Input area */}
       <div className="shrink-0 border-t border-slate-700 bg-slate-900 px-3 py-2.5">
+        {pendingImage && (
+          <div className="mb-2">
+            <div className="relative inline-block">
+              <img
+                src={pendingImage.dataUrl}
+                alt="Attachment"
+                className="h-16 w-16 rounded-lg object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setPendingImage(null)}
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-600 text-[10px] leading-none text-white hover:bg-slate-500"
+                aria-label="Remove image"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <div className="flex shrink-0 items-end gap-0.5">
+            <VoiceInputButton onTranscript={(t) => setInput(t)} />
+            <AttachmentPicker onAttach={handleAttach} />
+          </div>
           <textarea
             ref={textareaRef}
             value={input}
