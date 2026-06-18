@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useHealthData } from "@/lib/health/useHealthData";
 import { ExerciseEntry, FoodEntry } from "@/lib/health/types";
 import DailySummary from "@/components/health/DailySummary";
@@ -9,8 +10,27 @@ import ProgressGraphs from "@/components/health/ProgressGraphs";
 import GoalsPanel from "@/components/health/GoalsPanel";
 import GoogleFitPanel from "@/components/health/GoogleFitPanel";
 
+const HEVY_AUTO_SYNC_KEY = "lifeos.hevy.lastAutoSync";
+const HEVY_AUTO_SYNC_INTERVAL = 30 * 60 * 1000; // 30 minutes
+
+function useHevyAutoSync() {
+  useEffect(() => {
+    const last = localStorage.getItem(HEVY_AUTO_SYNC_KEY);
+    const shouldSync = !last || Date.now() - parseInt(last) > HEVY_AUTO_SYNC_INTERVAL;
+    if (!shouldSync) return;
+
+    fetch("/api/hevy/sync", { method: "POST" })
+      .then((r) => r.json())
+      .then((d: { ok?: boolean }) => {
+        if (d.ok) localStorage.setItem(HEVY_AUTO_SYNC_KEY, Date.now().toString());
+      })
+      .catch(() => {});
+  }, []);
+}
+
 export default function HealthPage() {
   const { logs, todayLog, goals, setGoals, updateToday, loaded } = useHealthData();
+  useHevyAutoSync();
 
   if (!loaded) {
     return (
